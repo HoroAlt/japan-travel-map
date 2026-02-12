@@ -1,35 +1,106 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './App.css';
 import type { Prefecture } from './types';
 import { initialPrefectures } from './data';
-import { useLocalStorage } from './hooks/useLocalStorage';
 import RealisticJapanMap from './components/RealisticJapanMap';
 import PrefectureModal from './components/PrefectureModal';
 import Stats from './components/Stats';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { api } from './services/api';
 
 function App() {
-  const [prefectures, setPrefectures] = useLocalStorage<Prefecture[]>('japan-travel-prefectures', initialPrefectures);
+  const [prefectures, setPrefectures] = useState<Prefecture[]>(initialPrefectures);
   const [selectedPrefecture, setSelectedPrefecture] = useState<Prefecture | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const transformRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load visits from backend on mount
+  useEffect(() => {
+    loadVisits();
+  }, []);
+
+  const loadVisits = async () => {
+    try {
+      setLoading(true);
+      const visits = await api.getVisits();
+      
+      // Mark visited prefectures based on API data
+      const updatedPrefectures = initialPrefectures.map(pref => {
+        const visit = visits.find((v: any) => v.city_id === pref.id);
+        if (visit) {
+          // Mark first district and location as visited
+          return {
+            ...pref,
+            districts: pref.districts.map((d, idx) => 
+              idx === 0 ? {
+                ...d,
+                locations: d.locations.map((l, lIdx) => 
+                  lIdx === 0 ? { ...l, visited: true } : l
+                )
+              } : d
+            )
+          };
+        }
+        return pref;
+      });
+      
+      setPrefectures(updatedPrefectures);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to load visits:', err);
+      setError('Не удалось загрузить данные с сервера. Используется локальное хранилище.');
+      setPrefectures(initialPrefectures);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePrefectureClick = (prefecture: Prefecture) => {
     setSelectedPrefecture(prefecture);
   };
 
-  const handleUpdatePrefecture = (updatedPrefecture: Prefecture) => {
-    const updatedPrefectures = prefectures.map(p => 
-      p.id === updatedPrefecture.id ? updatedPrefecture : p
-    );
-    setPrefectures(updatedPrefectures);
-    setSelectedPrefecture(updatedPrefecture);
+  const handleUpdatePrefecture = async (updatedPrefecture: Prefecture) => {
+    try {
+      // Check if any location is visited
+      const hasVisited = updatedPrefecture.districts.some(d => 
+        d.locations.some(l => l.visited)
+      );
+
+      if (hasVisited) {
+        // Add to backend
+        await api.addVisit(updatedPrefecture.id, '');
+      } else {
+        // Remove from backend
+        await api.removeVisit(updatedPrefecture.id);
+      }
+
+      const updatedPrefectures = prefectures.map(p => 
+        p.id === updatedPrefecture.id ? updatedPrefecture : p
+      );
+      setPrefectures(updatedPrefectures);
+      setSelectedPrefecture(updatedPrefecture);
+    } catch (err) {
+      console.error('Failed to update visit:', err);
+      alert('Ошибка сохранения на сервере');
+    }
   };
 
-  const resetData = () => {
+  const resetData = async () => {
     if (confirm('Вы уверены, что хотите сбросить все данные? Это действие нельзя отменить.')) {
-      setPrefectures(initialPrefectures);
+      try {
+        // Remove all visits from backend
+        const visits = await api.getVisits();
+        for (const visit of visits) {
+          await api.removeVisit(visit.city_id);
+        }
+        setPrefectures(initialPrefectures);
+      } catch (err) {
+        console.error('Failed to reset data:', err);
+        setPrefectures(initialPrefectures);
+      }
     }
   };
 
@@ -151,7 +222,7 @@ function App() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
         
@@ -187,6 +258,20 @@ function App() {
           return initPref;
         });
 
+        // Save to backend
+        for (const pref of mergedPrefectures) {
+          const hasVisited = pref.districts.some(d => 
+            d.locations.some(l => l.visited)
+          );
+          if (hasVisited) {
+            try {
+              await api.addVisit(pref.id, '');
+            } catch (err) {
+              console.error(`Failed to save ${pref.id}:`, err);
+            }
+          }
+        }
+
         setPrefectures(mergedPrefectures);
         alert('Данные успешно загружены!');
       } catch (error) {
@@ -202,6 +287,36 @@ function App() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="app">
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          flexDirection: 'column'
+        }}>
+          <div className="loading-spinner" style={{
+            width: '50px',
+            height: '50px',
+            border: '5px solid #f3f3f3',
+            borderTop: '5px solid #3498db',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <p style={{ marginTop: '20px', color: '#666' }}>Загрузка данных...</p>
+        </div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header>
@@ -211,6 +326,19 @@ function App() {
         </h1>
         <p>Отслеживайте свои путешествия по Японии</p>
       </header>
+
+      {error && (
+        <div style={{
+          background: '#fff3cd',
+          color: '#856404',
+          padding: '12px 20px',
+          margin: '10px 20px',
+          borderRadius: '6px',
+          border: '1px solid #ffeaa7'
+        }}>
+          ⚠️ {error}
+        </div>
+      )}
 
       <Stats prefectures={prefectures} />
 
@@ -306,7 +434,7 @@ function App() {
 
         <div className="map-hint">
           <p>🗺️ <strong>Навигация:</strong> Используйте колесико мыши для плавного масштабирования или кнопки +/-. Перетаскивайте карту для перемещения.</p>
-          <p>📍 <strong>Отметка мест:</strong> Нажмите на префектуру, чтобы открыть детали. Добавляйте свои любимые места в каждом районе — это могут быть памятные локации, вкусные рестораны, храмы или просто специальные места, которые запомнились в путешествии.</p>
+          <p>📍 <strong>Отметка мест:</strong> Нажмите на префектуру, чтобы открыть детали. Добавляйте свои любимые места в каждом районе.</p>
         </div>
       </div>
 
@@ -373,11 +501,6 @@ function App() {
           </p>
           <p className="footer-author">
             Разработчик: <a href="https://t.me/Horonyak" target="_blank" rel="noopener noreferrer" className="footer-link">Михаил "HoroAlt"</a> · 2026
-          </p>
-          <p className="footer-links">
-            <a href="https://www.ru.emb-japan.go.jp/" target="_blank" rel="noopener noreferrer" className="footer-link embassy-link">
-              🇯🇵 Посольство Японии в России
-            </a>
           </p>
         </div>
       </footer>

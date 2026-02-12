@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Private documentation (not for GitHub)
+server-docs/
+
+# Environment variables
+.env
+
+# Backend
+backend/node_modules/
+backend/data/
+*.db
