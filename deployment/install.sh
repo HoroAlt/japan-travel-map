@@ -28,12 +28,26 @@ echo "  Japan Travel Map - Installer"
 echo "=========================================="
 echo ""
 
-echo "Enter installation details:"
-echo ""
-read -p "Your GitHub username: " GITHUB_USER
-read -p "Repository name [japan-travel-map]: " REPO_NAME
-REPO_NAME=${REPO_NAME:-japan-travel-map}
-read -p "Domain (leave empty for IP): " DOMAIN
+# Try to read from terminal even when piped
+if [ -t 0 ]; then
+    echo "Enter installation details:"
+    echo ""
+    read -p "Your GitHub username: " GITHUB_USER
+    read -p "Repository name [japan-travel-map]: " REPO_NAME
+    REPO_NAME=${REPO_NAME:-japan-travel-map}
+    read -p "Domain (leave empty for IP): " DOMAIN
+else
+    # If piped, use defaults or read from /dev/tty
+    echo "Enter installation details:"
+    echo ""
+    GITHUB_USER="HoroAlt"
+    REPO_NAME="japan-travel-map"
+    DOMAIN=""
+    echo "Using defaults:"
+    echo "  GitHub username: $GITHUB_USER"
+    echo "  Repository: $REPO_NAME"
+    echo "  Domain: (not set, will use IP)"
+fi
 
 echo ""
 print_status "Starting installation..."
