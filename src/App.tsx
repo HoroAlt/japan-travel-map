@@ -261,7 +261,7 @@ function App() {
         // Save to backend
         for (const pref of mergedPrefectures) {
           const hasVisited = pref.districts.some(d => 
-            d.locations.some(l => l.visited)
+d.locations.some((l: any) => l.visited)
           );
           if (hasVisited) {
             try {

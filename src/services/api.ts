@@ -9,7 +9,7 @@ export const api = {
   },
 
   // Add visit
-  async addVisit(cityId, notes = '') {
+  async addVisit(cityId: string, notes = '') {
     const response = await fetch(`${API_URL}/api/visits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -20,7 +20,7 @@ export const api = {
   },
 
   // Remove visit
-  async removeVisit(cityId) {
+  async removeVisit(cityId: string) {
     const response = await fetch(`${API_URL}/api/visits/${cityId}`, {
       method: 'DELETE'
     });
@@ -29,7 +29,7 @@ export const api = {
   },
 
   // Check if visited
-  async isVisited(cityId) {
+  async isVisited(cityId: string) {
     const response = await fetch(`${API_URL}/api/visits/${cityId}`);
     if (!response.ok) throw new Error('Failed to check visit');
     const data = await response.json();
