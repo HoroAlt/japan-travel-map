@@ -28,28 +28,17 @@ echo "  Japan Travel Map - Installer"
 echo "=========================================="
 echo ""
 
-# Try to read from terminal even when piped
-if [ -t 0 ]; then
-    echo "Enter installation details:"
-    echo ""
-    read -p "Your GitHub username: " GITHUB_USER
-    read -p "Repository name [japan-travel-map]: " REPO_NAME
-    REPO_NAME=${REPO_NAME:-japan-travel-map}
-    read -p "Domain (leave empty for IP): " DOMAIN
-else
-    # If piped, use defaults or read from /dev/tty
-    echo "Enter installation details:"
-    echo ""
-    GITHUB_USER="HoroAlt"
-    REPO_NAME="japan-travel-map"
-    DOMAIN=""
-    echo "Using defaults:"
-    echo "  GitHub username: $GITHUB_USER"
-    echo "  Repository: $REPO_NAME"
-    echo "  Domain: (not set, will use IP)"
-fi
+# Hardcoded values
+GITHUB_USER="HoroAlt"
+REPO_NAME="japan-travel-map"
+DOMAIN=""
 
+echo "Configuration:"
+echo "  GitHub username: $GITHUB_USER"
+echo "  Repository: $REPO_NAME"
+echo "  Domain: (not set, using IP)"
 echo ""
+
 print_status "Starting installation..."
 echo ""
 
@@ -95,7 +84,7 @@ if [ -d "$PROJECT_DIR" ]; then
     rm -rf $PROJECT_DIR
 fi
 
-git clone $REPO_URL $PROJECT_DIR
+git clone "$REPO_URL" "$PROJECT_DIR"
 
 if [ $? -ne 0 ]; then
     print_error "Failed to clone repository"
@@ -110,7 +99,7 @@ print_success "Repository cloned"
 
 # Step 5: Install npm dependencies
 print_status "Step 5/8: Installing npm dependencies..."
-cd $PROJECT_DIR
+cd "$PROJECT_DIR"
 npm install
 print_success "Dependencies installed"
 
@@ -128,28 +117,28 @@ else
     SERVER_NAME="$DOMAIN"
 fi
 
-cat > /etc/nginx/sites-available/japan-travel-map << EOF
+cat > /etc/nginx/sites-available/japan-travel-map << 'EOF'
 server {
     listen 80;
-    server_name $SERVER_NAME;
+    server_name SERVER_NAME_PLACEHOLDER;
     
-    root $PROJECT_DIR/dist;
+    root PROJECT_DIR_PLACEHOLDER/dist;
     index index.html;
     
     access_log /var/log/nginx/japan-travel-map-access.log;
     error_log /var/log/nginx/japan-travel-map-error.log;
     
     location / {
-        try_files \$uri \$uri/ /index.html;
+        try_files $uri $uri/ /index.html;
     }
     
-    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|otf|webp)$ {
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|otf|webp)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         access_log off;
     }
     
-    location ~ /\\. {
+    location ~ /\. {
         deny all;
         access_log off;
         log_not_found off;
@@ -162,6 +151,10 @@ server {
 }
 EOF
 
+# Replace placeholders
+sed -i "s|SERVER_NAME_PLACEHOLDER|$SERVER_NAME|g" /etc/nginx/sites-available/japan-travel-map
+sed -i "s|PROJECT_DIR_PLACEHOLDER|$PROJECT_DIR|g" /etc/nginx/sites-available/japan-travel-map
+
 rm -f /etc/nginx/sites-enabled/default
 ln -sf /etc/nginx/sites-available/japan-travel-map /etc/nginx/sites-enabled/japan-travel-map
 
@@ -173,8 +166,8 @@ print_success "Nginx configured"
 
 # Step 8: Set permissions
 print_status "Step 8/8: Setting permissions..."
-chown -R www-data:www-data $PROJECT_DIR/dist
-chmod -R 755 $PROJECT_DIR/dist
+chown -R www-data:www-data "$PROJECT_DIR/dist"
+chmod -R 755 "$PROJECT_DIR/dist"
 print_success "Permissions set"
 
 # Finalization
@@ -211,7 +204,7 @@ if [ ! -z "$DOMAIN" ]; then
     read -p "Setup HTTPS (SSL)? (y/n): " SETUP_SSL
     if [ "$SETUP_SSL" = "y" ] || [ "$SETUP_SSL" = "Y" ]; then
         apt install -y certbot python3-certbot-nginx
-        certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email admin@$DOMAIN
+        certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email admin@$DOMAIN
         if [ $? -eq 0 ]; then
             print_success "SSL configured!"
             echo "   https://$DOMAIN"
