@@ -6,7 +6,11 @@ const createDistricts = (prefectureId: string, districtNames: { name: string; na
     name: d.name,
     nameJp: d.nameJp,
     visited: false,
-    locations: []
+    locations: [{
+      id: `${prefectureId}-district-${index}-loc-0`,
+      name: d.name,
+      visited: false
+    }]
   }));
 };
 
